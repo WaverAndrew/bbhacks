@@ -74,14 +74,24 @@ export interface Policy {
   premium_amount: string;
   nft_id: string | null;
   status: string;
+  escrow_owner: string | null;
+  escrow_sequence: number | null;
   created_at: string;
 }
 
 export async function insertPolicy(p: Omit<Policy, "id" | "created_at">): Promise<number> {
   return new Promise((resolve, reject) => {
     getDb().run(
-      "INSERT INTO policies (voyage_id, owner_address, premium_amount, nft_id, status) VALUES (?, ?, ?, ?, ?)",
-      [p.voyage_id, p.owner_address, p.premium_amount, p.nft_id ?? null, p.status],
+      "INSERT INTO policies (voyage_id, owner_address, premium_amount, nft_id, status, escrow_owner, escrow_sequence) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [
+        p.voyage_id,
+        p.owner_address,
+        p.premium_amount,
+        p.nft_id ?? null,
+        p.status,
+        p.escrow_owner ?? null,
+        p.escrow_sequence ?? null,
+      ],
       function (err) {
         if (err) reject(err);
         else resolve(this.lastID ?? 0);

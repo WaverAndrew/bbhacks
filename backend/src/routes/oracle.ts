@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { VAULT_ACCOUNT_SEED, RLUSD_ISSUER_ADDRESS, RLUSD_CURRENCY } from "../config";
 import * as db from "../db/queries";
+import { cancelEscrow, finishEscrow } from "../xrpl/escrows";
 import { burnCoverageNFTByIssuer } from "../xrpl/tokens";
 import { sendRLUSD } from "../xrpl/payments";
 
@@ -26,6 +27,18 @@ oracleRouter.post("/voyages/:id/incident", async (req, res) => {
       return res.status(500).json({ error: "Vault/issuer not configured" });
     }
     const insuredAmount = voyage.insured_amount;
+    let payoutTxHash = "";
+    let escrowFinishTxHash = "";
+
+    if (activePolicy.escrow_owner && activePolicy.escrow_sequence != null && VAULT_ACCOUNT_SEED) {
+      const finishResult = await finishEscrow({
+        fromSeed: VAULT_ACCOUNT_SEED,
+        owner: activePolicy.escrow_owner,
+        offerSequence: activePolicy.escrow_sequence,
+      });
+      escrowFinishTxHash = (finishResult.result as { hash?: string })?.hash ?? "";
+    }
+
     const result = await sendRLUSD({
       fromSeed: VAULT_ACCOUNT_SEED,
       toAddress: activePolicy.owner_address,
@@ -33,7 +46,7 @@ oracleRouter.post("/voyages/:id/incident", async (req, res) => {
       currency: RLUSD_CURRENCY,
       issuer: RLUSD_ISSUER_ADDRESS,
     });
-    const payoutTxHash = (result.result as any).hash ?? "";
+    payoutTxHash = (result.result as any).hash ?? "";
     if (activePolicy.nft_id) {
       await burnCoverageNFTByIssuer(activePolicy.nft_id);
     }
@@ -42,9 +55,11 @@ oracleRouter.post("/voyages/:id/incident", async (req, res) => {
     res.json({
       success: true,
       payoutTxHash,
+      ...(escrowFinishTxHash && { escrowFinishTxHash }),
       paidTo: activePolicy.owner_address,
       amount: insuredAmount,
-      message: "Claim paid in RLUSD from Vault; coverage NFT burned.",
+      message: "Claim paid in RLUSD from Vault; coverage NFT burned."
+        + (escrowFinishTxHash ? " Escrowed XRP released to policy owner." : ""),
     });
   } catch (e: any) {
     console.error(e);
@@ -69,6 +84,17 @@ oracleRouter.post("/voyages/:id/no-incident", async (req, res) => {
       return res.status(400).json({ error: "No active policy for this voyage" });
     }
     let burnTxHash = "";
+    let escrowCancelTxHash = "";
+
+    if (activePolicy.escrow_owner && activePolicy.escrow_sequence != null && VAULT_ACCOUNT_SEED) {
+      const cancelResult = await cancelEscrow({
+        fromSeed: VAULT_ACCOUNT_SEED,
+        owner: activePolicy.escrow_owner,
+        offerSequence: activePolicy.escrow_sequence,
+      });
+      escrowCancelTxHash = (cancelResult.result as { hash?: string })?.hash ?? "";
+    }
+
     if (activePolicy.nft_id) {
       const burnResult = await burnCoverageNFTByIssuer(activePolicy.nft_id);
       burnTxHash = burnResult.txHash;
@@ -78,7 +104,9 @@ oracleRouter.post("/voyages/:id/no-incident", async (req, res) => {
     res.json({
       success: true,
       burnTxHash,
-      message: "No incident; coverage NFT burned. Premium remains in Vault.",
+      ...(escrowCancelTxHash && { escrowCancelTxHash }),
+      message: "No incident; coverage NFT burned. Premium remains in Vault."
+        + (escrowCancelTxHash ? " Escrowed XRP returned to Vault." : ""),
     });
   } catch (e: any) {
     console.error(e);

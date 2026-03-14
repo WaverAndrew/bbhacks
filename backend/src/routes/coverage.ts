@@ -1,6 +1,9 @@
 import { Router } from "express";
+import { isoTimeToRippleTime } from "xrpl";
+import { VAULT_ACCOUNT_ADDRESS, VAULT_ACCOUNT_SEED } from "../config";
 import * as db from "../db/queries";
 import { getMarketPrice, getPremiumFromEvent, getPremiumFromTokenId, isTokenId } from "../polymarket/client";
+import { createEscrow } from "../xrpl/escrows";
 import { mintCoverageNFT } from "../xrpl/tokens";
 
 export const coverageRouter = Router();
@@ -104,7 +107,8 @@ coverageRouter.get("/premium", async (req, res) => {
 /**
  * POST /coverage/bind
  * Exporter has already sent premium RLUSD to Vault (frontend). We create voyage, mint coverage NFT, record policy.
- * Body: { voyageId, routeName, insuredAmount, startDate, endDate, premiumAmount, ownerAddress }
+ * Optional: escrowAmountDrops (XRP in drops) — if set, vault locks that XRP in escrow until voyage end; on resolve, incident → EscrowFinish (XRP to policy owner), no-incident → EscrowCancel (XRP back to vault). Exporter must have sent this XRP to the vault before calling bind.
+ * Body: { voyageId, routeName, insuredAmount, startDate, endDate, premiumAmount, ownerAddress, escrowAmountDrops? }
  */
 coverageRouter.post("/bind", async (req, res) => {
   try {
@@ -116,6 +120,7 @@ coverageRouter.post("/bind", async (req, res) => {
       endDate,
       premiumAmount,
       ownerAddress,
+      escrowAmountDrops,
     } = req.body as {
       voyageId: string;
       routeName: string;
@@ -124,6 +129,7 @@ coverageRouter.post("/bind", async (req, res) => {
       endDate: string;
       premiumAmount: string;
       ownerAddress: string;
+      escrowAmountDrops?: string;
     };
     if (!voyageId || !ownerAddress || !premiumAmount) {
       return res.status(400).json({ error: "voyageId, ownerAddress, premiumAmount required" });
@@ -132,29 +138,55 @@ coverageRouter.post("/bind", async (req, res) => {
     if (existing) {
       return res.status(400).json({ error: "Voyage already exists" });
     }
+    const endDateIso = endDate || new Date().toISOString();
     await db.insertVoyage({
       id: voyageId,
       route_name: routeName || voyageId,
       insured_amount: insuredAmount || "0",
       start_date: startDate || new Date().toISOString(),
-      end_date: endDate || new Date().toISOString(),
+      end_date: endDateIso,
       status: "active",
     });
     const metadataUri = `https://vault.example/policy/${voyageId}`;
     const { nftId, txHash } = await mintCoverageNFT(voyageId, metadataUri);
+
+    let escrowOwner: string | null = null;
+    let escrowSequence: number | null = null;
+    let escrowTxHash: string | undefined;
+
+    if (escrowAmountDrops && VAULT_ACCOUNT_SEED && VAULT_ACCOUNT_ADDRESS) {
+      const finishAfter = isoTimeToRippleTime(new Date(endDateIso));
+      const { result, offerSequence } = await createEscrow({
+        fromSeed: VAULT_ACCOUNT_SEED,
+        destination: ownerAddress,
+        amount: String(escrowAmountDrops),
+        finishAfter,
+        cancelAfter: finishAfter,
+        memo: voyageId,
+      });
+      escrowOwner = VAULT_ACCOUNT_ADDRESS;
+      escrowSequence = offerSequence;
+      escrowTxHash = (result.result as { hash?: string })?.hash ?? "";
+    }
+
     const policyId = await db.insertPolicy({
       voyage_id: voyageId,
       owner_address: ownerAddress,
       premium_amount: premiumAmount,
       nft_id: nftId,
       status: "active",
+      escrow_owner: escrowOwner,
+      escrow_sequence: escrowSequence,
     });
     res.json({
       policyId,
       voyageId,
       nftId,
       txHash,
-      message: "Your RLUSD premium is now locked; coverage NFT minted on XRPL.",
+      ...(escrowTxHash && { escrowTxHash }),
+      message: escrowOwner
+        ? "Coverage NFT minted; premium XRP locked in escrow until voyage end."
+        : "Your RLUSD premium is now locked; coverage NFT minted on XRPL.",
     });
   } catch (e: any) {
     console.error(e);

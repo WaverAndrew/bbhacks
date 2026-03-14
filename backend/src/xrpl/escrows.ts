@@ -44,6 +44,29 @@ export async function createEscrow(params: {
   const prepared = await client.autofill(tx);
   const signed = wallet.sign(prepared);
   const result = await client.submitAndWait(signed.tx_blob);
+  const offerSequence = (prepared as { Sequence?: number }).Sequence;
+  return { result, offerSequence: offerSequence ?? 0 };
+}
+
+export async function cancelEscrow(params: {
+  fromSeed: string;
+  owner: string;
+  offerSequence: number;
+}) {
+  const { fromSeed, owner, offerSequence } = params;
+  const client = await getClient();
+  const wallet = Wallet.fromSeed(fromSeed);
+
+  const tx = {
+    TransactionType: "EscrowCancel",
+    Account: wallet.address,
+    Owner: owner,
+    OfferSequence: offerSequence,
+  } as const;
+
+  const prepared = await client.autofill(tx);
+  const signed = wallet.sign(prepared);
+  const result = await client.submitAndWait(signed.tx_blob);
   return result;
 }
 

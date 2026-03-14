@@ -41,6 +41,8 @@ export function initDb(): Promise<void> {
                     premium_amount TEXT NOT NULL,
                     nft_id TEXT,
                     status TEXT NOT NULL DEFAULT 'active',
+                    escrow_owner TEXT,
+                    escrow_sequence INTEGER,
                     created_at TEXT NOT NULL DEFAULT (datetime('now')),
                     FOREIGN KEY (voyage_id) REFERENCES voyages(id)
                   )`,
