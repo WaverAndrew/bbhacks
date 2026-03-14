@@ -1,45 +1,39 @@
-# Trade Assurance Vault
+<div align="center">
 
-**Parametric voyage coverage and liquidity pooling on the XRP Ledger**
+## AEGIS
 
-A DeFi application on **XRPL Testnet** that pools RLUSD liquidity, sells parametric voyage coverage (with premiums and claims on-ledger), and funds short-term SME credit—all using XRPL-native assets, vaults, NFTs, and escrow.
+</div>
 
----
+<p align="center">
+  <strong>Parametric voyage coverage and liquidity pooling on the XRP Ledger.</strong>
+</p>
 
-## Screenshots
+<p align="center">
+  Pool RLUSD, sell parametric coverage, and fund SME credit — on XRPL Testnet with vaults, NFTs, and escrow.
+</p>
 
-*Add screenshots of the app below. Suggested paths: `docs/screenshots/` or root `screenshots/`.*
-
-### Landing
-
-<!-- ![Landing](screenshots/landing.png) -->
-
-### LP Dashboard — Deposit & Withdraw
-
-<!-- ![LP Dashboard](screenshots/lp-dashboard.png) -->
-
-### Exporter — Quote & Bind Coverage
-
-<!-- ![Exporter](screenshots/exporter.png) -->
-
-### Admin — Oracle (Incident / No Incident)
-
-<!-- ![Admin Oracle](screenshots/admin-oracle.png) -->
+<p align="center">
+  <a href="#the-vision">Vision</a> • <a href="#how-it-works">How it Works</a> • <a href="#xrpl-implementation">XRPL</a> • <a href="#getting-started">Getting Started</a> • <a href="#demo">Demo</a>
+</p>
 
 ---
 
-## Problem & Solution
+## The Vision
 
-High-risk trade and shipping corridors are expensive or uninsurable for many SMEs. This project uses XRPL to:
+High-risk trade and shipping corridors are expensive or uninsurable for many SMEs. This project uses the XRP Ledger to change that.
 
-- **Pool RLUSD** in a single-asset vault; LPs receive vault-issued vRLUSD.
-- **Sell parametric coverage** per voyage: premium flows to the vault (or is locked in XRP escrow); each policy is represented by an XLS-20 NFT; claims are paid in RLUSD from the vault.
-- **Resolve via oracle**: incident → RLUSD payout from vault + release of escrowed XRP to policy owner; no incident → coverage NFT burned, escrowed XRP returned to vault.
-- **Disburse short-term RLUSD loans** from the same vault.
+**AEGIS** is a DeFi application on XRPL Testnet that:
+
+- **Pools RLUSD** in a single-asset vault; LPs receive vault-issued vRLUSD.
+- **Sells parametric coverage** per voyage: premium flows to the vault (or is locked in XRP escrow); each policy is represented by an XLS-20 NFT; claims are paid in RLUSD from the vault.
+- **Resolves via oracle**: incident → RLUSD payout from vault + release of escrowed XRP to policy owner; no incident → coverage NFT burned, escrowed XRP returned to vault.
+- **Disburses short-term RLUSD loans** from the same vault.
 
 ---
 
-## Architecture
+## How it Works
+
+### Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -61,6 +55,21 @@ High-risk trade and shipping corridors are expensive or uninsurable for many SME
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+### Repo structure
+
+- **`backend/`** — Express API, XRPL module (client, payments, vault, tokens, escrows, accounts), SQLite (voyages, policies, loans, vault_state).
+- **`frontend/`** — Next.js: landing, LP (deposit/withdraw, vault metrics), Exporter (quote, bind coverage, policies), Admin (oracle: incident / no-incident).
+- **`scripts/`** — XRPL Testnet setup: create/fund RLUSD issuer, create/fund vault and trust line, fund addresses via faucet.
+
+### Screenshots
+
+*Add screenshots of the app below. Suggested paths: `docs/screenshots/` or root `screenshots/`.*
+
+<!-- ![Landing](screenshots/landing.png) -->
+<!-- ![LP Dashboard](screenshots/lp-dashboard.png) -->
+<!-- ![Exporter](screenshots/exporter.png) -->
+<!-- ![Admin Oracle](screenshots/admin-oracle.png) -->
+
 ---
 
 ## XRPL Implementation
@@ -79,22 +88,14 @@ All of the following are implemented on XRPL (Testnet) and used in the app.
 
 ---
 
-## Repo structure
+## Getting Started
 
-- **`backend/`** — Express API, XRPL module (client, payments, vault, tokens, escrows, accounts), SQLite (voyages, policies, loans, vault_state).
-- **`frontend/`** — Next.js: landing, LP (deposit/withdraw, vault metrics), Exporter (quote, bind coverage, policies), Admin (oracle: incident / no-incident).
-- **`scripts/`** — XRPL Testnet setup: create/fund RLUSD issuer, create/fund vault and trust line, fund addresses via faucet.
-
----
-
-## Prerequisites
+### Prerequisites
 
 - Node.js 20+
 - XRPL Testnet (or Devnet) access
 
----
-
-## Environment
+### Environment
 
 **Backend** (`backend/.env` or env vars):
 
@@ -112,11 +113,9 @@ All of the following are implemented on XRPL (Testnet) and used in the app.
 
 **Scripts:** same `XRPL_NETWORK_URL`, `RLUSD_ISSUER_ADDRESS`; optionally `RLUSD_ISSUER_SEED`, `VAULT_SEED`.
 
----
+### Run instructions
 
-## Run instructions
-
-### 1. One-time XRPL setup
+**1. One-time XRPL setup**
 
 ```bash
 cd scripts
@@ -128,7 +127,7 @@ npx ts-node setup-vault.ts
 npx ts-node fund-faucet.ts <address1> <address2>
 ```
 
-### 2. Backend
+**2. Backend**
 
 ```bash
 cd backend
@@ -139,7 +138,7 @@ npm run dev
 
 Backend listens on **http://localhost:4000**.
 
-### 3. Frontend
+**3. Frontend**
 
 ```bash
 cd frontend
@@ -152,21 +151,21 @@ Open **http://localhost:3000**.
 
 ---
 
-## Testing
+## Demo
+
+### Demo flow
+
+1. **LP** — Enter wallet (with RLUSD and vRLUSD trust line to vault). Send RLUSD to vault, then “Mint vRLUSD”; backend mints vRLUSD to you. Withdraw by returning vRLUSD to vault to receive RLUSD.
+2. **Exporter** — Create voyage (ID, route, insured amount, dates). Get quote, confirm coverage. Backend creates voyage, mints coverage NFT, records policy. Optionally send XRP to vault and pass `escrowAmountDrops` in bind to lock premium in escrow until voyage end.
+3. **Oracle** — In Admin, select voyage and “Mark Incident” or “Mark No Incident”. Incident: RLUSD payout from vault to policy owner, escrowed XRP released to policy owner (if any), coverage NFT burned. No incident: coverage NFT burned, escrowed XRP returned to vault (if any).
+
+### Testing
 
 - **Health:** `curl -s http://localhost:4000/health`
 - **Vault:** `curl -s http://localhost:4000/lp/vault`
 - **End-to-end:** One-time XRPL setup, then backend + frontend: LP deposit → Exporter bind coverage (with or without `escrowAmountDrops`) → Admin oracle (incident or no-incident).
 
 See **[TESTING.md](TESTING.md)** for the full guide.
-
----
-
-## Demo flow
-
-1. **LP** — Enter wallet (with RLUSD and vRLUSD trust line to vault). Send RLUSD to vault, then “Mint vRLUSD”; backend mints vRLUSD to you. Withdraw by returning vRLUSD to vault to receive RLUSD.
-2. **Exporter** — Create voyage (ID, route, insured amount, dates). Get quote, confirm coverage. Backend creates voyage, mints coverage NFT, records policy. Optionally send XRP to vault and pass `escrowAmountDrops` in bind to lock premium in escrow until voyage end.
-3. **Oracle** — In Admin, select voyage and “Mark Incident” or “Mark No Incident”. Incident: RLUSD payout from vault to policy owner, escrowed XRP released to policy owner (if any), coverage NFT burned. No incident: coverage NFT burned, escrowed XRP returned to vault (if any).
 
 ---
 
