@@ -1,10 +1,19 @@
-import { Client, Wallet, AccountSet, xrpToDrops } from "xrpl";
+import { Client, Wallet } from "xrpl";
 
+type AccountSet = {
+  TransactionType: "AccountSet";
+  Account: string;
+  SetFlag: number;
+};
+
+// XRPL skill / resources.md: Testnet = wss://s.altnet.rippletest.net:51233
+// Alternatives if unreachable: wss://testnet.xrpl-labs.com or wss://clio.altnet.rippletest.net:51233
 const NETWORK_URL =
   process.env.XRPL_NETWORK_URL ?? "wss://s.altnet.rippletest.net:51233";
+const CONNECTION_TIMEOUT_MS = Number(process.env.XRPL_CONNECTION_TIMEOUT_MS) || 20000;
 
 async function main() {
-  const client = new Client(NETWORK_URL);
+  const client = new Client(NETWORK_URL, { connectionTimeout: CONNECTION_TIMEOUT_MS });
   await client.connect();
 
   try {
@@ -36,7 +45,7 @@ async function main() {
     const result = await client.submitAndWait(signed.tx_blob);
 
     // eslint-disable-next-line no-console
-    console.log("AccountSet result:", result.result.engine_result);
+    console.log("AccountSet result:", (result.result as any).engine_result ?? (result.result as any).meta?.TransactionResult);
     // eslint-disable-next-line no-console
     console.log("Issuer address:", wallet.address);
   } finally {

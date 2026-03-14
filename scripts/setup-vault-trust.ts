@@ -7,8 +7,9 @@ import { Client, Wallet, TrustSet } from "xrpl";
 
 const NETWORK_URL =
   process.env.XRPL_NETWORK_URL ?? "wss://s.altnet.rippletest.net:51233";
+const CONNECTION_TIMEOUT_MS = Number(process.env.XRPL_CONNECTION_TIMEOUT_MS) || 20000;
 const VAULT_ACCOUNT_ADDRESS = process.env.VAULT_ACCOUNT_ADDRESS ?? "";
-const VRLUSD_CURRENCY = "VRLS";
+const VRLUSD_CURRENCY = "VRL";
 const RECIPIENT_SEED = process.env.RECIPIENT_SEED ?? "";
 
 async function main() {
@@ -17,7 +18,7 @@ async function main() {
     process.exit(1);
   }
 
-  const client = new Client(NETWORK_URL);
+  const client = new Client(NETWORK_URL, { connectionTimeout: CONNECTION_TIMEOUT_MS });
   await client.connect();
 
   try {
@@ -34,7 +35,7 @@ async function main() {
     const prepared = await client.autofill(trustSet);
     const signed = wallet.sign(prepared);
     const result = await client.submitAndWait(signed.tx_blob);
-    console.log("TrustSet result:", (result.result as any).engine_result);
+    console.log("TrustSet result:", (result.result as any).engine_result ?? (result.result as any).meta?.TransactionResult);
     console.log("Recipient", wallet.address, "can now hold", VRLUSD_CURRENCY, "from Vault");
   } finally {
     await client.disconnect();

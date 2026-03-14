@@ -4,10 +4,15 @@
 import { Wallet } from "xrpl";
 import { getClient } from "./client";
 
+/**
+ * Note: Standard EscrowCreate only supports XRP (drops string).
+ * Token escrows require the TokenEscrow amendment (not yet active on mainnet/testnet).
+ * Pass amount as a drops string for XRP escrows.
+ */
 export async function createEscrow(params: {
   fromSeed: string;
   destination: string;
-  amount: { currency: string; issuer: string; value: string };
+  amount: string; // XRP in drops
   finishAfter?: number;
   cancelAfter?: number;
   memo?: string;

@@ -49,5 +49,5 @@ export async function getAccountObjects(address: string): Promise<any[]> {
     account: address,
     ledger_index: "validated",
   });
-  return (res.result as any).objects ?? [];
+  return (res.result as any).account_objects ?? [];
 }
