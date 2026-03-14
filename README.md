@@ -1,15 +1,43 @@
 # Trade Assurance Vault
 
-A DeFi dApp on **XRPL Testnet** that pools RLUSD liquidity, sells simple parametric voyage coverage, and funds short-term SME credit. Built for hackathon demo.
+**Parametric voyage coverage and liquidity pooling on the XRP Ledger**
 
-## Problem
+A DeFi application on **XRPL Testnet** that pools RLUSD liquidity, sells parametric voyage coverage (with premiums and claims on-ledger), and funds short-term SME credit—all using XRPL-native assets, vaults, NFTs, and escrow.
 
-High-risk trade/shipping corridors (e.g. Hormuz-type risk) are expensive or uninsurable, especially for SMEs. This MVP shows how XRPL can:
+---
 
-- Pool RLUSD in a single-asset vault
-- Sell parametric coverage for a single voyage (premium → vault, coverage NFT minted)
-- Resolve claims via an oracle (incident → payout from vault; no incident → NFT burned, premium stays in vault)
-- Optionally disburse small RLUSD loans from the same vault
+## Screenshots
+
+*Add screenshots of the app below. Suggested paths: `docs/screenshots/` or root `screenshots/`.*
+
+### Landing
+
+<!-- ![Landing](screenshots/landing.png) -->
+
+### LP Dashboard — Deposit & Withdraw
+
+<!-- ![LP Dashboard](screenshots/lp-dashboard.png) -->
+
+### Exporter — Quote & Bind Coverage
+
+<!-- ![Exporter](screenshots/exporter.png) -->
+
+### Admin — Oracle (Incident / No Incident)
+
+<!-- ![Admin Oracle](screenshots/admin-oracle.png) -->
+
+---
+
+## Problem & Solution
+
+High-risk trade and shipping corridors are expensive or uninsurable for many SMEs. This project uses XRPL to:
+
+- **Pool RLUSD** in a single-asset vault; LPs receive vault-issued vRLUSD.
+- **Sell parametric coverage** per voyage: premium flows to the vault (or is locked in XRP escrow); each policy is represented by an XLS-20 NFT; claims are paid in RLUSD from the vault.
+- **Resolve via oracle**: incident → RLUSD payout from vault + release of escrowed XRP to policy owner; no incident → coverage NFT burned, escrowed XRP returned to vault.
+- **Disburse short-term RLUSD loans** from the same vault.
+
+---
 
 ## Architecture
 
@@ -28,59 +56,76 @@ High-risk trade/shipping corridors (e.g. Hormuz-type risk) are expensive or unin
                                     ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  XRPL Testnet                                                    │
-│  RLUSD issuer │ Vault (holds RLUSD, issues vRLUSD) │ Escrows    │
+│  RLUSD issuer │ Vault (holds RLUSD, issues vRLUSD) │ Escrows     │
 │  Coverage NFT issuer │ Payments, Trust lines, NFTs               │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+---
+
+## XRPL Implementation
+
+All of the following are implemented on XRPL (Testnet) and used in the app.
+
+| Feature | Implementation |
+|--------|----------------|
+| **Issued currencies (RLUSD, vRLUSD)** | Trust lines and **Payment** transactions for all RLUSD/vRLUSD flows. Vault holds RLUSD and issues vRLUSD; LPs deposit/withdraw via Payments. `backend/src/xrpl/payments.ts`, `vault.ts`, `tokens.ts`; scripts `setup-issuer`, `setup-vault`. |
+| **Trust lines** | Vault trust line to RLUSD issuer; LPs trust lines to vault for vRLUSD. Enforced before mint/withdraw. |
+| **Single-asset vault** | Vault account holds RLUSD and mints vRLUSD (Payment from vault to LP). TVL read via **account_lines** (`ledger_index: 'validated'`). `backend/src/xrpl/vault.ts`. |
+| **XLS-20 NFTs (coverage token)** | **NFTokenMint** on bind (policy created); **NFTokenBurn** on resolve. Flags `tfTransferable \| tfBurnable`, metadata in URI. `backend/src/xrpl/tokens.ts`. |
+| **Smart escrow** | **EscrowCreate** locks XRP until voyage end (Destination = policy owner, FinishAfter/CancelAfter from voyage `endDate`). **EscrowFinish** on incident (XRP to policy owner); **EscrowCancel** on no-incident (XRP back to vault). `backend/src/xrpl/escrows.ts`; used in coverage bind (optional `escrowAmountDrops`) and oracle resolve. |
+| **Account & ledger queries** | **account_info**, **account_lines**, **account_objects** with `ledger_index: 'validated'`. `backend/src/xrpl/accounts.ts`. |
+| **Transaction handling** | `autofill()` for Fee, Sequence, LastLedgerSequence; `submitAndWait()` for validation; string amounts only; `maxFeeXRP` on client. Incoming payment handling uses `meta.delivered_amount` for partial-payment safety. |
+
+---
+
 ## Repo structure
 
-- **`backend/`** — Express API, XRPL wrapper (payments, vault, tokens, escrows), SQLite (voyages, policies, loans, vault_state).
-- **`frontend/`** — Next.js app: landing, LP (deposit/withdraw, vault metrics), Exporter (quote, bind coverage, policy list), Admin (oracle: incident / no-incident).
-- **`scripts/`** — XRPL setup: create/fund RLUSD issuer, create/fund Vault and trust line, fund addresses via faucet.
+- **`backend/`** — Express API, XRPL module (client, payments, vault, tokens, escrows, accounts), SQLite (voyages, policies, loans, vault_state).
+- **`frontend/`** — Next.js: landing, LP (deposit/withdraw, vault metrics), Exporter (quote, bind coverage, policies), Admin (oracle: incident / no-incident).
+- **`scripts/`** — XRPL Testnet setup: create/fund RLUSD issuer, create/fund vault and trust line, fund addresses via faucet.
+
+---
 
 ## Prerequisites
 
 - Node.js 20+
 - XRPL Testnet (or Devnet) access
 
+---
+
 ## Environment
 
 **Backend** (`backend/.env` or env vars):
 
 - `XRPL_NETWORK_URL` — e.g. `wss://s.altnet.rippletest.net:51233`
-- `RLUSD_ISSUER_ADDRESS` — Demo RLUSD issuer (from scripts).
+- `RLUSD_ISSUER_ADDRESS` — RLUSD issuer (from scripts)
 - `RLUSD_CURRENCY` — e.g. `RLS`
-- `VAULT_ACCOUNT_ADDRESS` — Vault account (from scripts).
-- `VAULT_ACCOUNT_SEED` — Vault secret (for minting vRLUSD, sending RLUSD).
-- `COVERAGE_NFT_ISSUER_SEED` — Account that mints/burns coverage NFTs. For minimal demo you can use the same value as `VAULT_ACCOUNT_SEED`.
-- `PORT` — API port (default `4000`).
+- `VAULT_ACCOUNT_ADDRESS` — Vault account
+- `VAULT_ACCOUNT_SEED` — Vault secret (minting vRLUSD, sending RLUSD, creating/finishing/cancelling escrows)
+- `COVERAGE_NFT_ISSUER_SEED` — Account that mints/burns coverage NFTs
+- `PORT` — API port (default `4000`)
 
 **Frontend** (`frontend/.env.local`):
 
-- `NEXT_PUBLIC_API_URL` — Backend URL; must match backend PORT (default `http://localhost:4000`).
+- `NEXT_PUBLIC_API_URL` — Backend URL (e.g. `http://localhost:4000`)
 
-**Scripts** (env):
+**Scripts:** same `XRPL_NETWORK_URL`, `RLUSD_ISSUER_ADDRESS`; optionally `RLUSD_ISSUER_SEED`, `VAULT_SEED`.
 
-- `XRPL_NETWORK_URL` — same as above.
-- `RLUSD_ISSUER_ADDRESS` — for setup-vault (Vault’s trust line to RLUSD).
-- `RLUSD_ISSUER_SEED` — optional; if not set, setup-issuer creates a new wallet.
-- `VAULT_SEED` — optional; if not set, setup-vault creates a new wallet.
+---
 
 ## Run instructions
 
-### 1. Setup XRPL accounts (one-time)
+### 1. One-time XRPL setup
 
 ```bash
 cd scripts
 npm install
-# Create and fund RLUSD issuer (save address and seed)
 npx ts-node setup-issuer.ts
-# Set RLUSD_ISSUER_ADDRESS (and optionally RLUSD_ISSUER_SEED) in env, then:
+# Set RLUSD_ISSUER_ADDRESS (and optionally RLUSD_ISSUER_SEED), then:
 npx ts-node setup-vault.ts
-# Save VAULT_ACCOUNT_ADDRESS and VAULT_ACCOUNT_SEED. Create/fund a separate account for coverage NFTs and set COVERAGE_NFT_ISSUER_SEED in backend.
-# Fund any test addresses (e.g. LP, exporter):
-npx ts-node fund-faucet.ts rAddr1 rAddr2
+# Save VAULT_ACCOUNT_ADDRESS and VAULT_ACCOUNT_SEED; create/fund coverage NFT issuer, set COVERAGE_NFT_ISSUER_SEED in backend
+npx ts-node fund-faucet.ts <address1> <address2>
 ```
 
 ### 2. Backend
@@ -88,12 +133,11 @@ npx ts-node fund-faucet.ts rAddr1 rAddr2
 ```bash
 cd backend
 npm install
-# Optional: copy .env.example to .env and set XRPL/vault vars. PORT defaults to 4000.
+# Copy .env.example to .env and set XRPL/vault vars
 npm run dev
-# Or: npm run build && npm start
 ```
 
-Backend listens on **http://localhost:4000** by default (so the frontend can reach the Polymarket live-price API).
+Backend listens on **http://localhost:4000**.
 
 ### 3. Frontend
 
@@ -104,55 +148,35 @@ echo "NEXT_PUBLIC_API_URL=http://localhost:4000" > .env.local
 npm run dev
 ```
 
-Open http://localhost:3000. Restart the frontend after changing `.env.local` so it picks up the API URL.
+Open **http://localhost:3000**.
 
-**If the Polymarket price shows "—" or "…"**: ensure the backend is running (`cd backend && npm run dev`) and that `frontend/.env.local` has `NEXT_PUBLIC_API_URL=http://localhost:4000` with no trailing slash. If you use a different port, set `PORT` in `backend/.env` and the same port in `NEXT_PUBLIC_API_URL`.
+---
 
 ## Testing
 
-See **[TESTING.md](TESTING.md)** for a full guide. Summary:
+- **Health:** `curl -s http://localhost:4000/health`
+- **Vault:** `curl -s http://localhost:4000/lp/vault`
+- **End-to-end:** One-time XRPL setup, then backend + frontend: LP deposit → Exporter bind coverage (with or without `escrowAmountDrops`) → Admin oracle (incident or no-incident).
 
-- **Quick API smoke test** (backend must be running):
-  ```bash
-  ./scripts/smoke-test-api.sh
-  ```
-  Or: `curl -s http://localhost:4000/health` and `curl -s http://localhost:4000/lp/vault`.
+See **[TESTING.md](TESTING.md)** for the full guide.
 
-- **End-to-end**: Follow TESTING.md for one-time XRPL setup (issuer, vault, fund wallets, trust lines, issue RLUSD), then run backend + frontend and walk through LP deposit → Exporter bind coverage → Admin oracle (incident or no incident).
+---
 
 ## Demo flow
 
-1. **LP** — Enter wallet address. (Optional: send RLUSD from issuer to your wallet first.) Enter amount and click “Mint vRLUSD” (backend mints vRLUSD to you after you have sent RLUSD to the Vault).
-2. **Exporter** — Enter wallet. Create a voyage (ID, route, insured amount, dates). Get quote, then “Confirm coverage”. Backend creates voyage, mints coverage NFT, records policy. Premium is expected to be sent to Vault by the exporter (e.g. from issuer or existing balance).
-3. **Oracle** — In Admin, select a voyage and click “Mark Incident” or “Mark No Incident”. Backend pays out RLUSD from Vault to policy owner (incident) or burns NFT and marks no incident.
+1. **LP** — Enter wallet (with RLUSD and vRLUSD trust line to vault). Send RLUSD to vault, then “Mint vRLUSD”; backend mints vRLUSD to you. Withdraw by returning vRLUSD to vault to receive RLUSD.
+2. **Exporter** — Create voyage (ID, route, insured amount, dates). Get quote, confirm coverage. Backend creates voyage, mints coverage NFT, records policy. Optionally send XRP to vault and pass `escrowAmountDrops` in bind to lock premium in escrow until voyage end.
+3. **Oracle** — In Admin, select voyage and “Mark Incident” or “Mark No Incident”. Incident: RLUSD payout from vault to policy owner, escrowed XRP released to policy owner (if any), coverage NFT burned. No incident: coverage NFT burned, escrowed XRP returned to vault (if any).
 
-## XRPL features used
+---
 
-| Feature | Where |
-|--------|--------|
-| Issued currencies (RLUSD, vRLUSD) | `backend/src/xrpl/payments.ts`, `vault.ts`, `tokens.ts`; scripts setup-issuer, setup-vault |
-| Trust lines | Vault trust line to RLUSD issuer; LPs trust line to Vault for vRLUSD |
-| Payments | All RLUSD/vRLUSD transfers |
-| XLS-20 NFTs (coverage token) | `backend/src/xrpl/tokens.ts` — mint on bind, burn on resolve |
-| Escrows | `backend/src/xrpl/escrows.ts` (available for TokenEscrow when amendment enabled) |
-| Batch transactions | Not used in MVP; can be added for bind (Payment + NFT mint) and payout (EscrowFinish + Burn) |
+## Security & reserves
 
-## Risk notes
+- **Reserves:** Trust lines, escrows, and NFTs consume reserve (e.g. 2 XRP on mainnet); consider this in UX.
+- **Secrets:** Keep `VAULT_ACCOUNT_SEED`, `COVERAGE_NFT_ISSUER_SEED`, and all seeds in environment only; never commit or log them.
+- **Partial payments:** Use `meta.delivered_amount` when processing incoming payments.
 
-- **Reserves:** Each trust line/escrow/NFT costs reserve (e.g. 2 XRP on mainnet). Warn users in UI.
-- **Secrets:** Never commit or log `VAULT_ACCOUNT_SEED`, `COVERAGE_NFT_ISSUER_SEED`, or any account seeds.
-- **Partial payments:** When crediting incoming RLUSD, use `meta.delivered_amount`, not `Amount`.
-- **TokenEscrow:** If the network does not have the TokenEscrow amendment, premium/claim are handled via backend state and Payments only.
-
-## XRPL skill alignment
-
-This implementation follows the [XRPL development skill](https://github.com/XRPL-Commons/xrpl-training-2026-january) and best practices:
-
-- **Network:** Testnet default (`wss://s.altnet.rippletest.net:51233`), no mainnet in dev.
-- **Transactions:** `autofill()` for Fee, Sequence, `LastLedgerSequence`; `submitAndWait()` so we only return after validation (not just submission).
-- **Amounts:** XRP via `xrpToDrops()`; issued currency as string values (no float). Fee cap via `maxFeeXRP: '0.01'` where applicable.
-- **Security:** Incoming payment handling would use `meta.delivered_amount` (partial-payment safe); secrets only in env; reserves communicated in UI/README.
-- **Frontend:** MVP uses simple wallet address input; for production use `xrpl-connect` and delegate signing to the wallet.
+---
 
 ## License
 
