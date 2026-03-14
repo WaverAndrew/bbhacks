@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getBalance = getBalance;
 exports.getTrustLineBalance = getTrustLineBalance;
+exports.hasTrustLine = hasTrustLine;
 exports.getAccountObjects = getAccountObjects;
 /**
  * XRPL account queries (skill-aligned): ledger_index: 'validated' for account_info and account_lines.
@@ -37,6 +38,16 @@ async function getTrustLineBalance(address, currency, issuer) {
         return "0";
     return String(line.balance ?? 0);
 }
+async function hasTrustLine(address, currency, issuer) {
+    const client = await (0, client_1.getClient)();
+    const res = await client.request({
+        command: "account_lines",
+        account: address,
+        ledger_index: "validated",
+    });
+    const lines = res.result.lines ?? [];
+    return lines.some((l) => l.currency === currency && l.account === issuer);
+}
 async function getAccountObjects(address) {
     const client = await (0, client_1.getClient)();
     const res = await client.request({
@@ -44,6 +55,6 @@ async function getAccountObjects(address) {
         account: address,
         ledger_index: "validated",
     });
-    return res.result.objects ?? [];
+    return res.result.account_objects ?? [];
 }
 //# sourceMappingURL=accounts.js.map

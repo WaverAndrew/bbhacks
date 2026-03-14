@@ -34,12 +34,26 @@ async function mintCoverageNFT(voyageId, metadataUri) {
     const result = await client.submitAndWait(signed.tx_blob);
     const meta = result.result.meta;
     let nftId = "";
-    if (meta?.affected_nodes) {
+    if (meta?.nftoken_id) {
+        // xrpl.js v4 provides nftoken_id directly in meta
+        nftId = meta.nftoken_id;
+    }
+    else if (meta?.affected_nodes) {
+        // Fallback: scan affected_nodes for NFTokenPage changes
         for (const n of meta.affected_nodes) {
-            const created = n.CreatedNode;
-            if (created?.LedgerEntryType === "NFTokenPage" && created.NewFields?.NFTokens?.length) {
-                nftId = created.NewFields.NFTokens[0].NFToken.NFTokenID;
-                break;
+            const node = n.CreatedNode ?? n.ModifiedNode;
+            if (node?.LedgerEntryType === "NFTokenPage") {
+                const tokens = node.NewFields?.NFTokens ?? node.FinalFields?.NFTokens ?? [];
+                const prevTokens = node.PreviousFields?.NFTokens ?? [];
+                const prevIds = new Set(prevTokens.map((t) => t.NFToken.NFTokenID));
+                for (const t of tokens) {
+                    if (!prevIds.has(t.NFToken.NFTokenID)) {
+                        nftId = t.NFToken.NFTokenID;
+                        break;
+                    }
+                }
+                if (nftId)
+                    break;
             }
         }
     }
@@ -86,7 +100,7 @@ async function mintVRlusd(toAddress, amount) {
         Account: wallet.address,
         Destination: toAddress,
         Amount: {
-            currency: "VRLS",
+            currency: "VRL",
             issuer: config_1.VAULT_ACCOUNT_ADDRESS,
             value: amount,
         },

@@ -36,18 +36,88 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.coverageRouter = void 0;
 const express_1 = require("express");
 const db = __importStar(require("../db/queries"));
+const client_1 = require("../polymarket/client");
 const tokens_1 = require("../xrpl/tokens");
 exports.coverageRouter = (0, express_1.Router)();
-const PREMIUM_RATE = 0.02; // 2% of insured amount for MVP
+const PREMIUM_RATE = 0.02; // 2% of insured amount when no marketId
 /**
  * POST /coverage/quote
- * Body: { insuredAmount, startDate, endDate }
+ * Body: { insuredAmount, startDate, endDate, marketId? }
+ * If marketId (Polymarket event ID) is provided, premium is derived from Polymarket; else 2% default.
  */
-exports.coverageRouter.post("/quote", (req, res) => {
-    const { insuredAmount, startDate, endDate } = req.body;
-    const amount = Number(insuredAmount) || 0;
-    const premium = (amount * PREMIUM_RATE).toFixed(2);
-    res.json({ premium, insuredAmount: String(amount), startDate, endDate });
+exports.coverageRouter.post("/quote", async (req, res) => {
+    try {
+        const { insuredAmount, startDate, endDate, marketId } = req.body;
+        const amount = Number(insuredAmount) || 0;
+        if (marketId && String(marketId).trim()) {
+            const id = marketId.trim();
+            const { premium, source, errorDetail } = (0, client_1.isTokenId)(id)
+                ? await (0, client_1.getPremiumFromTokenId)(id, amount)
+                : await (0, client_1.getPremiumFromEvent)(id, amount);
+            return res.json({
+                premium,
+                insuredAmount: String(amount),
+                startDate,
+                endDate,
+                source,
+                ...(errorDetail && { errorDetail }),
+            });
+        }
+        const premium = (amount * PREMIUM_RATE).toFixed(2);
+        res.json({
+            premium,
+            insuredAmount: String(amount),
+            startDate,
+            endDate,
+            source: "default",
+        });
+    }
+    catch (e) {
+        const message = e instanceof Error ? e.message : "Quote failed";
+        res.status(500).json({ error: message });
+    }
+});
+/**
+ * GET /coverage/market-price?marketId=
+ * Returns raw Polymarket price (0–1) for the market, for display (not premium).
+ */
+exports.coverageRouter.get("/market-price", async (req, res) => {
+    try {
+        const marketId = req.query.marketId?.trim();
+        if (!marketId)
+            return res.status(400).json({ error: "marketId required" });
+        const price = await (0, client_1.getMarketPrice)(marketId);
+        if (price === null)
+            return res.status(404).json({ error: "Price not available" });
+        res.json({ price });
+    }
+    catch (e) {
+        const message = e instanceof Error ? e.message : "Market price failed";
+        res.status(500).json({ error: message });
+    }
+});
+/**
+ * GET /coverage/premium?marketId=&insuredAmount=
+ * Returns only { premium, source } for live estimate in CONFIGURE step.
+ */
+exports.coverageRouter.get("/premium", async (req, res) => {
+    try {
+        const marketId = req.query.marketId?.trim();
+        const insuredAmount = req.query.insuredAmount;
+        const amount = Number(insuredAmount) || 0;
+        if (marketId && amount > 0) {
+            const { premium, source, errorDetail } = (0, client_1.isTokenId)(marketId)
+                ? await (0, client_1.getPremiumFromTokenId)(marketId, amount)
+                : await (0, client_1.getPremiumFromEvent)(marketId, amount);
+            return res.json({ premium, source, ...(errorDetail && { errorDetail }) });
+        }
+        const premium = (amount * PREMIUM_RATE).toFixed(2);
+        res.json({ premium, source: "default" });
+    }
+    catch (e) {
+        const message = e instanceof Error ? e.message : "Premium failed";
+        res.status(500).json({ error: message });
+    }
 });
 /**
  * POST /coverage/bind

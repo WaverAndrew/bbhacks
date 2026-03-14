@@ -58,7 +58,7 @@ High-risk trade/shipping corridors (e.g. Hormuz-type risk) are expensive or unin
 
 **Frontend** (`frontend/.env.local`):
 
-- `NEXT_PUBLIC_API_URL` — Backend URL (e.g. `http://localhost:4000`).
+- `NEXT_PUBLIC_API_URL` — Backend URL; must match backend PORT (default `http://localhost:4000`).
 
 **Scripts** (env):
 
@@ -88,10 +88,12 @@ npx ts-node fund-faucet.ts rAddr1 rAddr2
 ```bash
 cd backend
 npm install
-# Set env vars (see above)
+# Optional: copy .env.example to .env and set XRPL/vault vars. PORT defaults to 4000.
 npm run dev
 # Or: npm run build && npm start
 ```
+
+Backend listens on **http://localhost:4000** by default (so the frontend can reach the Polymarket live-price API).
 
 ### 3. Frontend
 
@@ -102,7 +104,9 @@ echo "NEXT_PUBLIC_API_URL=http://localhost:4000" > .env.local
 npm run dev
 ```
 
-Open http://localhost:3000.
+Open http://localhost:3000. Restart the frontend after changing `.env.local` so it picks up the API URL.
+
+**If the Polymarket price shows "—" or "…"**: ensure the backend is running (`cd backend && npm run dev`) and that `frontend/.env.local` has `NEXT_PUBLIC_API_URL=http://localhost:4000` with no trailing slash. If you use a different port, set `PORT` in `backend/.env` and the same port in `NEXT_PUBLIC_API_URL`.
 
 ## Testing
 

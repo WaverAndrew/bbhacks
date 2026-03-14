@@ -42,6 +42,21 @@ export async function getTrustLineBalance(
   return String(line.balance ?? 0);
 }
 
+export async function hasTrustLine(
+  address: string,
+  currency: string,
+  issuer: string
+): Promise<boolean> {
+  const client = await getClient();
+  const res = await client.request({
+    command: "account_lines",
+    account: address,
+    ledger_index: "validated",
+  });
+  const lines = (res.result as any).lines ?? [];
+  return lines.some((l: any) => l.currency === currency && l.account === issuer);
+}
+
 export async function getAccountObjects(address: string): Promise<any[]> {
   const client = await getClient();
   const res = await client.request({

@@ -1,24 +1,104 @@
 import { Router } from "express";
 import * as db from "../db/queries";
+import { getMarketPrice, getPremiumFromEvent, getPremiumFromTokenId, isTokenId } from "../polymarket/client";
 import { mintCoverageNFT } from "../xrpl/tokens";
 
 export const coverageRouter = Router();
 
-const PREMIUM_RATE = 0.02; // 2% of insured amount for MVP
+const PREMIUM_RATE = 0.02; // 2% of insured amount when no marketId
 
 /**
  * POST /coverage/quote
- * Body: { insuredAmount, startDate, endDate }
+ * Body: { insuredAmount, startDate, endDate, marketId? }
+ * If marketId (Polymarket event ID) is provided, premium is derived from Polymarket; else 2% default.
  */
-coverageRouter.post("/quote", (req, res) => {
-  const { insuredAmount, startDate, endDate } = req.body as {
-    insuredAmount: string;
-    startDate: string;
-    endDate: string;
-  };
-  const amount = Number(insuredAmount) || 0;
-  const premium = (amount * PREMIUM_RATE).toFixed(2);
-  res.json({ premium, insuredAmount: String(amount), startDate, endDate });
+coverageRouter.post("/quote", async (req, res) => {
+  try {
+    const { insuredAmount, startDate, endDate, marketId } = req.body as {
+      insuredAmount: string;
+      startDate: string;
+      endDate: string;
+      marketId?: string;
+    };
+    const amount = Number(insuredAmount) || 0;
+    if (marketId && String(marketId).trim()) {
+      const id = marketId.trim();
+      const { premium, source, errorDetail } = isTokenId(id)
+        ? await getPremiumFromTokenId(id, amount)
+        : await getPremiumFromEvent(id, amount);
+      return res.json({
+        premium,
+        insuredAmount: String(amount),
+        startDate,
+        endDate,
+        source,
+        ...(errorDetail && { errorDetail }),
+      });
+    }
+    const premium = (amount * PREMIUM_RATE).toFixed(2);
+    res.json({
+      premium,
+      insuredAmount: String(amount),
+      startDate,
+      endDate,
+      source: "default",
+    });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Quote failed";
+    res.status(500).json({ error: message });
+  }
+});
+
+/**
+ * GET /coverage/market-price?marketId=
+ * Returns raw Polymarket price (0–1) for the market, for display (not premium).
+ */
+coverageRouter.get("/market-price", async (req, res) => {
+  const marketId = (req.query.marketId as string)?.trim();
+  const marketIdShort = marketId ? marketId.slice(0, 8) + "..." : undefined;
+  console.log("[coverage] GET /market-price", { marketId: marketIdShort });
+  try {
+    if (!marketId) return res.status(400).json({ error: "marketId required" });
+    const price = await getMarketPrice(marketId);
+    if (price === null) {
+      console.log("[coverage] GET /market-price -> 404 (price not available)");
+      return res.status(404).json({ error: "Price not available" });
+    }
+    console.log("[coverage] GET /market-price -> 200", { price });
+    res.json({ price, source: "polymarket" });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Market price failed";
+    console.log("[coverage] GET /market-price -> 500", { error: message });
+    res.status(500).json({ error: message });
+  }
+});
+
+/**
+ * GET /coverage/premium?marketId=&insuredAmount=
+ * Returns only { premium, source } for live estimate in CONFIGURE step.
+ */
+coverageRouter.get("/premium", async (req, res) => {
+  const marketId = (req.query.marketId as string)?.trim();
+  const insuredAmount = req.query.insuredAmount as string;
+  const marketIdShort = marketId ? marketId.slice(0, 8) + "..." : undefined;
+  console.log("[coverage] GET /premium", { marketId: marketIdShort, insuredAmount });
+  try {
+    const amount = Number(insuredAmount) || 0;
+    if (marketId && amount > 0) {
+      const { premium, source, errorDetail } = isTokenId(marketId)
+        ? await getPremiumFromTokenId(marketId, amount)
+        : await getPremiumFromEvent(marketId, amount);
+      console.log("[coverage] GET /premium -> 200", { premium, source, errorDetail: errorDetail || undefined });
+      return res.json({ premium, source, ...(errorDetail && { errorDetail }) });
+    }
+    const premium = (amount * PREMIUM_RATE).toFixed(2);
+    console.log("[coverage] GET /premium -> 200 (default)", { premium });
+    res.json({ premium, source: "default" });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Premium failed";
+    console.log("[coverage] GET /premium -> 500", { error: message });
+    res.status(500).json({ error: message });
+  }
 });
 
 /**

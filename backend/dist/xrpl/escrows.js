@@ -7,6 +7,11 @@ exports.finishEscrow = finishEscrow;
  */
 const xrpl_1 = require("xrpl");
 const client_1 = require("./client");
+/**
+ * Note: Standard EscrowCreate only supports XRP (drops string).
+ * Token escrows require the TokenEscrow amendment (not yet active on mainnet/testnet).
+ * Pass amount as a drops string for XRP escrows.
+ */
 async function createEscrow(params) {
     const { fromSeed, destination, amount, finishAfter, cancelAfter, memo } = params;
     const client = await (0, client_1.getClient)();
