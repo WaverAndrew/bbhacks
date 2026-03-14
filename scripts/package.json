@@ -1,0 +1,24 @@
+{
+  "name": "scripts",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "setup:issuer": "ts-node setup-issuer.ts",
+    "setup:vault": "ts-node setup-vault.ts",
+    "setup:trust": "ts-node setup-trust.ts",
+    "setup:vault-trust": "ts-node setup-vault-trust.ts",
+    "fund:faucet": "ts-node fund-faucet.ts",
+    "issue:rlusd": "ts-node issue-rlusd.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@types/node": "^25.5.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3",
+    "xrpl": "^4.6.0"
+  }
+}
