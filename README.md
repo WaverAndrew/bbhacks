@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <a href="#the-vision">Vision</a> • <a href="#how-it-works">How it Works</a> • <a href="#xrpl-implementation">XRPL</a> • <a href="#getting-started">Getting Started</a> • <a href="#demo">Demo</a>
+  <a href="http://bbhacks.vercel.app" target="_blank" rel="noopener">Live app</a> • <a href="#the-vision">Vision</a> • <a href="#how-it-works">How it Works</a> • <a href="#xrpl-implementation">XRPL</a> • <a href="#getting-started">Getting Started</a> • <a href="#demo">Demo</a>
 </p>
 
 ---
@@ -152,6 +152,8 @@ Open **http://localhost:3000**.
 ---
 
 ## Demo
+
+**Live app:** [http://bbhacks.vercel.app](http://bbhacks.vercel.app)
 
 ### Demo flow
 
